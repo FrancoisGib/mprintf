@@ -3,9 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_STR_SIZE 32
-
-extern void mprintf(char* motif, ...);
+extern void mprintf(char* pattern, ...);
 
 int main() {
     mprintf("args: %d %c %s %h\n", 234, 'c', "string", 0x64);
