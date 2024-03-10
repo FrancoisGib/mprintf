@@ -87,6 +87,8 @@ int_to_string: /* number in %r11, conversion made in %rax */
 
 .global read_arg
 read_arg:
+   cmpq $5, %r13
+   je stack_arg
    pushq %rbp
    movq %rsp, %rbp
    cmpq $0, %r13
@@ -100,9 +102,7 @@ read_arg:
    cmpq $4, %r13
    je fifth_arg
    
-
    get_arg_type:
-      inc %r13 /* next arg */
       cmpq $0, %r14
       je read_decimal_number
       cmpq $2, %r14
@@ -114,6 +114,15 @@ read_arg:
       cmpq $4, %r14
       je read_binary_number
       jmp read_arg_done
+
+   stack_arg:
+      popq %r11
+      popq %rcx
+      pushq %r11
+      movq (%rcx), %r11
+      pushq %rbp
+      movq %rsp, %rbp
+      jmp get_arg_type
 
    /* Arguments register placed to %r11 */
    first_arg:
@@ -155,28 +164,22 @@ read_arg:
       jmp read_string
 
    read_decimal_number:
-      pushq %r15
       movq $10, %r15 /* the base to convert the number to string */
       call int_to_string
-      popq %r15
       inc %r12
       inc %rax
       jmp read_arg_done
 
    read_hexadecimal_number:
-      pushq %r15
       movq $16, %r15 /* the base to convert the number to string */
       call int_to_string
-      popq %r15
       inc %r12
       inc %rax
       jmp read_arg_done
 
    read_binary_number:
-      pushq %r15
       movq $2, %r15 /* the base to convert the number to string */
       call int_to_string
-      popq %r15
       inc %r12
       inc %rax
       jmp read_arg_done
@@ -196,6 +199,8 @@ mprintf:
    pushq %r12 /* saving the registers used in the program */
    pushq %r13
    pushq %r14 /* used for the status of the % (%s -> 0, %d -> 1, %c -> 2) */
+   pushq %r15
+   pushq %rbx
    pushq %rbp
    movq %rsp, %rbp /* save the stack pointer */
    movq $res, %rax
@@ -217,20 +222,24 @@ mprintf:
    percent:
       cmpq $5, %r13
       je read_stack
-      inc %rdi /* pass the percent */
-      movb (%rdi), %r10b
-      inc %rdi /* pass the pattern (s, d...) */
-      cmpb $'s', %r10b
-      je string
-      cmpb $'d', %r10b
-      je decimal_number
-      cmpb $'c', %r10b
-      je char
-      cmpb $'h', %r10b
-      je hexadecimal_number
-      cmpb $'b', %r10b
-      je binary_number
-      jmp read_pattern
+
+      arg_type:
+         inc %rdi /* pass the percent */
+         movb (%rdi), %r10b
+         inc %rdi /* pass the pattern (s, d...) */
+         cmpb $'s', %r10b
+         je string
+         cmpb $'d', %r10b
+         je decimal_number
+         cmpb $'c', %r10b
+         je char
+         cmpb $'h', %r10b
+         je hexadecimal_number
+         cmpb $'b', %r10b
+         je binary_number
+         cmpq $5, %r13
+         je read_stack
+         jmp read_pattern
       
    string:
       movq $2, %r14
@@ -253,14 +262,16 @@ mprintf:
 
    start_arg_read:
       call read_arg
+      cmpq $1, %r9
+      je compute_args
+      inc %r13 /* next arg */
       jmp read_pattern
 
-
    read_stack:
-      movq $1, %r13
       popq %rbp
       pushq %rbp
       movq %rdi, %rbx
+      movq $0, %r8
 
       get_args_count:
          movb (%rbx), %r10b
@@ -268,11 +279,32 @@ mprintf:
          je compute_args
          cmpb $'%', %r10b
          je percent_stack
+         inc %rbx
+         jmp get_args_count
 
       percent_stack:
+         subq $8, %rbp
+         inc %r8
+         pushq %rbp
+         addq $2, %rbx /* pass the pattern (ex: %d) */
+         jmp get_args_count
 
       compute_args:
+         movb (%rdi), %r10b
+         cmpb $0, %r10b
+         je print
+         cmpb $'%', %r10b
+         je pop_arg_from_stack_and_compute
+         movb %r10b, (%rax)
+         inc %rdi
+         inc %rax
+         inc %r12
+         jmp compute_args
 
+         pop_arg_from_stack_and_compute:
+            movq $1, %r9 /* status for the arg reading, to jump here */
+            jmp arg_type
+            
    print:
       movq $1, %rax
       movq $0, %rdi
@@ -283,6 +315,8 @@ mprintf:
    done:
       movq %rbp, %rsp
       popq %rbp
+      popq %rbx
+      popq %r15
       popq %r14 /* restore the registers used in the program */
       popq %r13
       popq %r12
