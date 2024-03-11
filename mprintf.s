@@ -202,7 +202,6 @@ mprintf:
    pushq %r13
    pushq %r14 /* used for the status of the % (%s -> 0, %d -> 1, %c -> 2) */
    pushq %r15
-   pushq %rbx
    movq $res, %rax
    movq $0, %r12 /* res string size */
    movq $0, %r13 /* count of args */
@@ -238,7 +237,7 @@ mprintf:
          cmpb $'b', %r10b
          je binary_number
          cmpq $5, %r13
-         je read_stack
+         je get_args_count
          jmp read_pattern
       
    string:
@@ -263,57 +262,41 @@ mprintf:
    start_arg_read:
       call read_arg
       cmpq $1, %r9
-      je compute_args
+      je get_args_count
       inc %r13 /* next arg */
       jmp read_pattern
 
    read_stack:
-      popq %rbp
-      pushq %rbp
-      movq %rdi, %rbx
       movq $0, %r8
+      addq $8, %rbp
 
       get_args_count:
-         movb (%rbx), %r10b
+         movb (%rdi), %r10b
          cmpb $0, %r10b
-         je reset_stack_before_pop
+         je end_stack_reading
          cmpb $'%', %r10b
          je percent_stack
-         inc %rbx
+         movb %r10b, (%rax)
+         inc %rax
+         inc %r12
+         inc %rdi
          jmp get_args_count
 
       percent_stack:
-         subq $8, %rbp
+         addq $8, %rbp
          inc %r8
          pushq %rbp
-         addq $2, %rbx /* pass the pattern (ex: %d) */
-         jmp get_args_count
+         movq $1, %r9 /* status for the arg reading, to jump here */
+         jmp arg_type
 
-      reset_stack_before_pop:
-         pushq %r8
-         loop:
-            addq $8, %rbp
-            dec %r8
-            jnz loop
-         popq %r8
-         
-
-      compute_args:
-         movb (%rdi), %r10b
-         cmpb $0, %r10b
-         je print
-         cmpb $'%', %r10b
-         je pop_arg_from_stack_and_compute
-         movb %r10b, (%rax)
-         inc %rdi
-         inc %rax
-         inc %r12
-         jmp compute_args
-
-         pop_arg_from_stack_and_compute:
-            movq $1, %r9 /* status for the arg reading, to jump here */
-            jmp arg_type
             
+      end_stack_reading:
+         dec %r8
+         cmpq $0, %r8
+         je print
+         subq $8, %rbp
+         jmp end_stack_reading
+
    print:
       movq $1, %rax
       movq $0, %rdi
@@ -322,12 +305,10 @@ mprintf:
       syscall
 
    done:
-      popq %rbx
       popq %r15
       popq %r14 /* restore the registers used in the program */
       popq %r13
       popq %r12
-      movq %rbp, %rsp
       popq %rbp
       ret
 
