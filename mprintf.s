@@ -1,10 +1,7 @@
 .data
-res:
-   .space 64
 number_buffer32:
    .space 10
 .text
-
 .global int_to_string
 int_to_string: /* number in %r11, conversion made in %rax */
    pushq %rbp
@@ -21,9 +18,9 @@ int_to_string: /* number in %r11, conversion made in %rax */
    division:
       movq $0, %rdx
       movq %r15, %rbx
-      cmpl $0, %eax
+      cmpq $0, %rax
       je reverse_str
-      idiv %ebx
+      idivq %rbx
       cmpq $9, %rdx
       jg hexadecimal_char
       addq $48, %rdx
@@ -91,8 +88,6 @@ read_arg:
    je stack_arg
    pushq %rbp
    movq %rsp, %rbp
-   cmpq $0, %r13
-   je first_arg
    cmpq $1, %r13
    je second_arg
    cmpq $2, %r13
@@ -122,11 +117,6 @@ read_arg:
       pushq %rbp
       movq %rsp, %rbp
       movq (%rcx), %r11
-      jmp get_arg_type
-
-   /* Arguments register placed to %r11 */
-   first_arg:
-      movq %rsi, %r11
       jmp get_arg_type
 
    second_arg:
@@ -199,12 +189,28 @@ mprintf:
    pushq %rbp
    movq %rsp, %rbp /* save the stack pointer */
    pushq %r12 /* saving the registers used in the program */
-   pushq %r13
    pushq %r14 /* used for the status of the % (%s -> 0, %d -> 1, %c -> 2) */
    pushq %r15
-   movq $res, %rax
+   pushq %r11
+   pushq %r9
+   pushq %r13
+   pushq %rdx
+   pushq %rcx
+   pushq %rbx
+   pushq %rdi
+   movq %rsi, %rdi
+   call malloc
+   popq %rdi
+   popq %rbx
+   popq %rcx
+   popq %rdx
+   popq %r13
+   popq %r9
+   popq %r11
+   pushq %r13
+   pushq %rax
    movq $0, %r12 /* res string size */
-   movq $0, %r13 /* count of args */
+   movq $1, %r13 /* count of args */
 
    read_pattern:
       movb (%rdi), %r10b
@@ -298,16 +304,23 @@ mprintf:
          jmp end_stack_reading
 
    print:
+      popq %r9
       movq $1, %rax
       movq $0, %rdi
-      movq $res, %rsi
+      movq %r9, %rsi
       movq %r12, %rdx
       syscall
+      movq %r9, %rdi
+      pushq %rbp
+      movq %rsp, %rbp
+      call free
+      popq %rbp
+      movq %rbp, %rsp
 
    done:
+      popq %r13
       popq %r15
       popq %r14 /* restore the registers used in the program */
-      popq %r13
       popq %r12
       popq %rbp
       ret
