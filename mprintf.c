@@ -6,6 +6,6 @@
 extern void mprintf(char* pattern, ...);
 
 int main() {
-    mprintf("args: %d %c %s %h %b %d %d\n", 234, 'c', "string", 0xFFFFFFFF, 8, 15, 20);
+    mprintf("args: %d %c %s %h %b %s %s\n", 234, 'c', "string", 0xFFFFFFFF, 8, "qsd", "fdsq");
     return 0;
 }

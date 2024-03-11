@@ -7,12 +7,12 @@ number_buffer32:
 
 .global int_to_string
 int_to_string: /* number in %r11, conversion made in %rax */
+   pushq %rbp
+   movq %rsp, %rbp /* save %rsp before pushing %rax because i need %rax in the middle of the function */
    pushq %r13 /* %r13 is used for the number_buffer32 pointer because %rax will be used by the division */
    pushq %r14 /* used for the size of the number so need to save it before */
    pushq %rbx
    pushq %rdx
-   pushq %rbp
-   movq %rsp, %rbp /* save %rsp before pushing %rax because i need %rax in the middle of the function */
    pushq %rax
    movq $number_buffer32, %r13
    movq $0, %r14
@@ -77,12 +77,12 @@ int_to_string: /* number in %r11, conversion made in %rax */
 
 
    int_to_string_done:
-      movq %rbp, %rsp
-      popq %rbp
       popq %rdx
       popq %rbx
       popq %r14
       popq %r13
+      movq %rbp, %rsp
+      popq %rbp
       ret
 
 .global read_arg
@@ -119,9 +119,9 @@ read_arg:
       popq %r11
       popq %rcx
       pushq %r11
-      movq (%rcx), %r11
       pushq %rbp
       movq %rsp, %rbp
+      movq (%rcx), %r11
       jmp get_arg_type
 
    /* Arguments register placed to %r11 */
@@ -196,13 +196,13 @@ read_arg:
 
 .global mprintf
 mprintf:
+   pushq %rbp
+   movq %rsp, %rbp /* save the stack pointer */
    pushq %r12 /* saving the registers used in the program */
    pushq %r13
    pushq %r14 /* used for the status of the % (%s -> 0, %d -> 1, %c -> 2) */
    pushq %r15
    pushq %rbx
-   pushq %rbp
-   movq %rsp, %rbp /* save the stack pointer */
    movq $res, %rax
    movq $0, %r12 /* res string size */
    movq $0, %r13 /* count of args */
@@ -276,7 +276,7 @@ mprintf:
       get_args_count:
          movb (%rbx), %r10b
          cmpb $0, %r10b
-         je compute_args
+         je reset_stack_before_pop
          cmpb $'%', %r10b
          je percent_stack
          inc %rbx
@@ -288,6 +288,15 @@ mprintf:
          pushq %rbp
          addq $2, %rbx /* pass the pattern (ex: %d) */
          jmp get_args_count
+
+      reset_stack_before_pop:
+         pushq %r8
+         loop:
+            addq $8, %rbp
+            dec %r8
+            jnz loop
+         popq %r8
+         
 
       compute_args:
          movb (%rdi), %r10b
@@ -313,12 +322,12 @@ mprintf:
       syscall
 
    done:
-      movq %rbp, %rsp
-      popq %rbp
       popq %rbx
       popq %r15
       popq %r14 /* restore the registers used in the program */
       popq %r13
       popq %r12
+      movq %rbp, %rsp
+      popq %rbp
       ret
 
