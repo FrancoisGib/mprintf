@@ -30,31 +30,30 @@ put_arg_in_res:
 get_arg_size:
     pushq %rbp
     movq %rsp, %rbp
+    popq %rsi /* former rbp */
+    popq %r11 /* function call pointer */
+    movq $0, %r8 /* size of the arg */
     /* get_arg_type */
     cmpb $'c', %r10b
     je char_type
     cmpb $'s', %r10b
     je string_type
-    pushq %rax /* save the registers */
-    pushq %rdx
     movq %rdi, %rax
 
     get_number_size:
+        pushq %rdx
         movq $0, %rdx
         cmpq $0, %rax
         je get_number_size_done
         idivq %r13
-        inc %r12
+        inc %r8
         jmp get_number_size
 
         get_number_size_done:
             popq %rdx
-            popq %rax
             jmp get_arg_size_done
 
     string_type:
-        pushq %r8
-        movq $0, %r8
         get_str_size:
             cmpb $0, (%rdi)
             je get_str_size_done
@@ -62,20 +61,16 @@ get_arg_size:
             inc %r8
             jmp get_str_size
         get_str_size_done:
-            popq %rdi /* r8 */
-            popq %rsi /* former rbp */
-            popq %r11 /* function call pointer */
             pushq %r8
-            addq %r8, %r12
-            pushq %r11
-            pushq %rsi
-            movq %rdi, %r8 /* restore the registers */
             jmp get_arg_size_done
 
     char_type:
         inc %r12
 
     get_arg_size_done:
+        movq %r8, %rax
+        pushq %r11
+        pushq %rsi
         movq %rbp, %rsp
         popq %rbp
         ret
@@ -95,14 +90,15 @@ mprintf:
         movb (%r11), %r10b
         cmpb $0, %r10b
         je end_read_args
-        inc %r11
+        inc %r11 /* pass the char */
         cmpb $'%', %r10b
         je get_arg_type
-        inc %r12
-        jmp get_args
+        inc %r12 /* inc the res size */
+        jmp get_args /* read the next arg */
 
         get_arg_type:
             movb (%r11), %r10b
+            inc %r11 /* pass the type */
             cmpb $'t', %r10b
             je type_array
             cmpb $'d', %r10b
@@ -127,40 +123,40 @@ mprintf:
             je push_r9
 
         push_rsi:
-            pushq %rsi
+            movq %rsi, %rdi
             jmp inc_arg_counter
 
         push_rdx:
-            pushq %rdx
+            movq %rdx, %rdi
             jmp inc_arg_counter
 
         push_rcx:
-            pushq %rcx
+            movq %rcx, %rdi
             jmp inc_arg_counter
 
         push_r8:
-            pushq %r8
+            movq %r8, %rdi
             jmp inc_arg_counter
 
         push_r9:
-            pushq %r9
+            movq %r9, %rdi
             jmp inc_arg_counter
         
         push_stack_arg:
             addq $8, %rbp
-            movq 8(%rbp), %rsi
-            pushq %rsi
+            movq 8(%rbp), %rdi
 
-        inc_arg_counter:
-            inc %ah
-            inc %r11
-            popq %rdi
-            pushq %r11
+        inc_arg_counter: /* call the function with the arg in rdi */
+            inc %ah /* inc the number of args read */
             pushq %rdi
+            pushq %r11
+            pushq %r8
+            pushq %rax
             call get_arg_size
-            popq %rsi
+            addq %rax, %r12
+            popq %rax
+            popq %r8
             popq %r11
-            pushq %rsi
             jmp get_args /* go to next arg */
 
         /* al
