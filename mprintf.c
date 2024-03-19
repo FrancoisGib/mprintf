@@ -6,7 +6,6 @@
 extern void mprintf(char* pattern, ...);
 
 int main() {
-    mprintf("args:%d%c%s%b%s%d%d", 128, 'c', "string", 8, "qsd", 45, 32);
+    mprintf("args: %d, %s", 0, "dqsd");
     return 0;
 }
-
