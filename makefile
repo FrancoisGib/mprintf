@@ -1,11 +1,11 @@
 mprintf:
 	gcc -no-pie -g -static mprintf.c mprintf.s -o mprintf
 
-mprintfbis:
-	gcc -no-pie -g -static mprintf.c mprintfbis.s -o mprintf
+mprintf2:
+	gcc -no-pie -g -static mprintf.c mprintf2.s -o mprintf
 
-ok:
-	gcc -no-pie -g -static mprintf.c ok.s -o mprintf
+mprintf3:
+	gcc -no-pie -g -static mprintf.c mprintf3.s -o mprintf
 
 
 test:
