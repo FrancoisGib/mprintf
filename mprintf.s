@@ -1,313 +1,387 @@
-.data
-res:
-   .space 64
-number_buffer32:
-   .space 10
 .text
-
-.global int_to_string
-int_to_string: /* number in %r11, conversion made in %rax */
-   pushq %rbp
-   movq %rsp, %rbp /* save %rsp before pushing %rax because i need %rax in the middle of the function */
-   pushq %r13 /* %r13 is used for the number_buffer32 pointer because %rax will be used by the division */
-   pushq %r14 /* used for the size of the number so need to save it before */
-   pushq %rbx
-   pushq %rdx
-   pushq %rax
-   movq $number_buffer32, %r13
-   movq $0, %r14
-   movq %r11, %rax
-
-   division:
-      movq $0, %rdx
-      movq %r15, %rbx
-      cmpl $0, %eax
-      je reverse_str
-      idiv %ebx
-      cmpq $9, %rdx
-      jg hexadecimal_char
-      addq $48, %rdx
-
-   put_in_rax:
-      movq %rdx, (%r13)
-      inc %r13
-      inc %r14
-      jmp division
-
-   hexadecimal_char:
-      addq $55, %rdx
-      jmp put_in_rax
-
-   reverse_str:
-      popq %rax
-      dec %r13
-      cmpq $10, %r15 /* add a header if the denominator is different than 10 */
-      jne add_header
-
-      place_char_in_rax:
-         cmpq $0, %r14
-         je int_to_string_done
-         movb (%r13), %r11b
-         movb %r11b, (%rax)
-         inc %r12
-         inc %rax
-         dec %r14
-         dec %r13
-         jmp place_char_in_rax
-
-      add_header:
-         movb $'0', (%rax)
-         inc %rax
-         inc %r12
-         cmpq $16, %r15
-         je add_hexadecimal_header
-         jmp add_binary_header
-
-         add_hexadecimal_header:
-            movb $'x', (%rax)
-            jmp end_header
-
-         add_binary_header:
-            movb $'b', (%rax)
-
-         end_header:
-            inc %rax
-            inc %r12
-            jmp place_char_in_rax
-
-
-   int_to_string_done:
-      popq %rdx
-      popq %rbx
-      popq %r14
-      popq %r13
-      movq %rbp, %rsp
-      popq %rbp
-      ret
-
-.global read_arg
-read_arg:
-   cmpq $5, %r13
-   je stack_arg
-   pushq %rbp
-   movq %rsp, %rbp
-   cmpq $0, %r13
-   je first_arg
-   cmpq $1, %r13
-   je second_arg
-   cmpq $2, %r13
-   je third_arg
-   cmpq $3, %r13
-   je fourth_arg
-   cmpq $4, %r13
-   je fifth_arg
-   
-   get_arg_type:
-      cmpq $0, %r14
-      je read_decimal_number
-      cmpq $2, %r14
-      je read_string
-      cmpq $1, %r14
-      je read_char
-      cmpq $3, %r14
-      je read_hexadecimal_number
-      cmpq $4, %r14
-      je read_binary_number
-      jmp read_arg_done
-
-   stack_arg:
-      popq %r11
-      popq %rcx
-      pushq %r11
-      pushq %rbp
-      movq %rsp, %rbp
-      movq (%rcx), %r11
-      jmp get_arg_type
-
-   /* Arguments register placed to %r11 */
-   first_arg:
-      movq %rsi, %r11
-      jmp get_arg_type
-
-   second_arg:
-      movq %rdx, %r11
-      jmp get_arg_type
-
-   third_arg:
-      movq %rcx, %r11
-      jmp get_arg_type
-
-   fourth_arg:
-      movq %r8, %r11
-      jmp get_arg_type
-
-   fifth_arg:
-      movq %r9, %r11
-      jmp get_arg_type
-
-   /* Args read methods */
-   read_string:
-      movb (%r11), %r10b
-      cmpb $0, %r10b /* if the second arg doesn't exist */
-      jle read_arg_done
-      cmpb $30, %r10b /* if the third arg doesn't exist */
-      je read_arg_done
-      cmpb $208, %r10b /* if the fourth arg doesn't exist */
-      je read_arg_done
-      cmpb $4, %r10b /* if the fifth arg doesn't exist */
-      je read_arg_done
-      /* no need for the sixth args to check if it doesn't exist */
-      movb %r10b, (%rax)
-      inc %r12
-      inc %r11
-      inc %rax
-      jmp read_string
-
-   read_decimal_number:
-      movq $10, %r15 /* the base to convert the number to string */
-      call int_to_string
-      inc %r12
-      inc %rax
-      jmp read_arg_done
-
-   read_hexadecimal_number:
-      movq $16, %r15 /* the base to convert the number to string */
-      call int_to_string
-      inc %r12
-      inc %rax
-      jmp read_arg_done
-
-   read_binary_number:
-      movq $2, %r15 /* the base to convert the number to string */
-      call int_to_string
-      inc %r12
-      inc %rax
-      jmp read_arg_done
-
-   read_char:
-      movb %r11b, (%rax)
-      inc %r12
-      inc %rax
-
-   read_arg_done:
-      movq %rbp, %rsp
-      popq %rbp
-      ret
-
 .global mprintf
 mprintf:
-   pushq %rbp
-   movq %rsp, %rbp /* save the stack pointer */
-   pushq %r12 /* saving the registers used in the program */
-   pushq %r13
-   pushq %r14 /* used for the status of the % (%s -> 0, %d -> 1, %c -> 2) */
-   pushq %r15
-   movq $res, %rax
-   movq $0, %r12 /* res string size */
-   movq $0, %r13 /* count of args */
+    enter $0, $0
+    movq %rdi, %r15 /* pointer to the pattern */
+    xorq %r10, %r10 /* string to print size */
+    xorq %r11, %r11 /* number of args */
+    pushq %r12 /* The char value register */
+    pushq %r15
+    pushq %r13
 
-   read_pattern:
-      movb (%rdi), %r10b
-      cmpb $0, %r10b
-      je print
-      cmpb $'%', %r10b
-      je percent
-      movb %r10b, (%rax)
-      inc %rax
-      inc %r12
-      inc %rdi
-      jmp read_pattern
+    read_pattern:
+        movb (%r15), %r12b
+        cmpb $0, %r12b
+        je read_pattern_done
+        cmpb $'%', %r12b
+        je get_arg_type
+        inc %r15
+        inc %r10
+        jmp read_pattern
 
-   percent:
-      cmpq $5, %r13
-      je read_stack
+        get_arg_type:
+            inc %r15 /* pass the percent */
+            movb (%r15), %r12b
+            inc %r15 /* pass the arg type */
+            cmpb $'t', %r12b
+            je array_arg
 
-      arg_type:
-         inc %rdi /* pass the percent */
-         movb (%rdi), %r10b
-         inc %rdi /* pass the pattern (s, d...) */
-         cmpb $'s', %r10b
-         je string
-         cmpb $'d', %r10b
-         je decimal_number
-         cmpb $'c', %r10b
-         je char
-         cmpb $'h', %r10b
-         je hexadecimal_number
-         cmpb $'b', %r10b
-         je binary_number
-         cmpq $5, %r13
-         je get_args_count
-         jmp read_pattern
-      
-   string:
-      movq $2, %r14
-      jmp start_arg_read
+            push_arg:
+                inc %r11
+                cmpq $1, %r11 /* no case for the first, first arg already in rsi */
+                je push_arg_done
+                cmpq $2, %r11
+                je second_arg
+                cmpq $3, %r11
+                je third_arg
+                cmpq $4, %r11
+                je fourth_arg
+                cmpq $5, %r11
+                je fifth_arg
+                jmp stack_arg
 
-   decimal_number:
-      movq $0, %r14
-      jmp start_arg_read
+                second_arg:
+                    movq %rdx, %rsi
+                    jmp push_arg_done
 
-   hexadecimal_number:
-      movq $3, %r14
-      jmp start_arg_read
+                third_arg:
+                    movq %rcx, %rsi
+                    jmp push_arg_done
 
-   binary_number:
-      movq $4, %r14
-      jmp start_arg_read
+                fourth_arg:
+                    movq %r8, %rsi
+                    jmp push_arg_done
 
-   char:
-      movq $1, %r14
+                fifth_arg:
+                    movq %r9, %rsi
+                    jmp push_arg_done
 
-   start_arg_read:
-      call read_arg
-      cmpq $1, %r9
-      je get_args_count
-      inc %r13 /* next arg */
-      jmp read_pattern
+                stack_arg:
+                    movq 16(%rbp), %rsi
+                    addq $8, %rbp
 
-   read_stack:
-      movq $0, %r8
-      addq $8, %rbp
+                push_arg_done:
+                    cmpb $1, %r12b
+                    je get_array_pointer_done
+                    cmpb $2, %r12b
+                    je get_array_size_done
+                    jmp inc_buffer_size_with_arg_size
 
-      get_args_count:
-         movb (%rdi), %r10b
-         cmpb $0, %r10b
-         je end_stack_reading
-         cmpb $'%', %r10b
-         je percent_stack
-         movb %r10b, (%rax)
-         inc %rax
-         inc %r12
-         inc %rdi
-         jmp get_args_count
+                inc_buffer_size_with_arg_size:
+                    cmpq $0, %rsi
+                    je number_zero
+                    pushq %rsi
+                    pushq %r12
+                    inc_buffer_end:
+                        call get_arg_size
+                        addq %rax, %r10
+                        popq %r12
+                        cmpq $1, %rsi
+                        je number_not_zero
+                        cmpb $'s', %r12b
+                        jne read_pattern
+                    
+                    push_arg_size:
+                        pushq %rax /* push the size of the arg to avoid recalculating later */
+                        jmp read_pattern
 
-      percent_stack:
-         addq $8, %rbp
-         inc %r8
-         pushq %rbp
-         movq $1, %r9 /* status for the arg reading, to jump here */
-         jmp arg_type
+                    number_zero:
+                        inc %r10
+                        pushq $2
+                        jmp read_pattern
 
-            
-      end_stack_reading:
-         dec %r8
-         cmpq $0, %r8
-         je print
-         subq $8, %rbp
-         jmp end_stack_reading
+                    number_not_zero:
+                        pushq $1
+                        jmp read_pattern
 
-   print:
-      movq $1, %rax
-      movq $0, %rdi
-      movq $res, %rsi
-      movq %r12, %rdx
-      syscall
+                    array_arg:
+                        movb $2, %r12b
+                        jmp push_arg
+                        get_array_size_done:
+                            dec %r12b
+                            pushq %rsi /* push the array size */
+                            movq %rsi, %r14
+                            jmp push_arg
+                        get_array_pointer_done:
+                            movq %r14, %rdx /* the second argument has been read so we can use rdx */
+                            addq %rdx, %r10 /* add the array header ([n,n]) */
+                            inc %r10 /* we had one comma too many so we don't have to add the ']', just the '[' */
+                            movb (%r15), %r12b /* get the type of the elements */
+                            inc %r15 /* pass the arg type */
+                            movq %rsi, %r14
+                        get_array_print_size_loop:
+                            movl (%r14), %esi
+                            call get_arg_size
+                            addq %rax, %r10
+                            dec %rdx
+                            cmpq $0, %rdx
+                            je get_array_print_size_done
+                            addq $4, %r14 /* the size of an int */
+                            jmp get_array_print_size_loop
+                        get_array_print_size_done:
+                            pushq %r14
+                            jmp read_pattern
+                    
+        read_pattern_done:  /* reset the stack */
+            cmpq $5, %r11
+            jng malloc_res_size
+            dec %r11
+            subq $8, %rbp
+            jmp read_pattern_done
+                
+        malloc_res_size:
+            pushq %r10
+            movq %r10, %rdi
+            call malloc
+            dec %r10
+            addq %r10, %rax
+            popq %r10
+            movq %r10, %rdx
+            dec %r15 /* point before the \0 */
+        
+        reverse_read:
+            cmpq $0, %r10 /* end before the first char */
+            je print
+            movb (%r15), %r12b
+            dec %r15
+            movb (%r15), %r11b
+            cmpb $'%', %r11b
+            je call_put_arg_in_string
+            cmpb $'t', %r11b
+            je call_put_array
+            movb %r12b, (%rax)
+            dec %r10
+            dec %rax
+            jmp reverse_read
 
-   done:
-      popq %r15
-      popq %r14 /* restore the registers used in the program */
-      popq %r13
-      popq %r12
-      popq %rbp
-      ret
+            call_put_arg_in_string:
+                dec %r15
+                cmpb $'c', %r12b
+                je call_put_char
+                cmpb $'s', %r12b
+                je call_put_string
+                
+            call_put_number:
+                popq %r13
+                cmpq $2, %r13
+                je case_zero
+                popq %r8
+                cmpb $'b', %r12b
+                je put_binary_number
+                cmpb $'h', %r12b
+                je put_hexadecimal_number
+                movq $10, %r13 /* case decimal number */
+                call put_number_in_res
+                jmp reverse_read
+                
+                put_binary_number:
+                    movq $2, %r13
+                    call put_number_in_res
+                    movb $'b', (%rax)
+                    dec %rax
+                    movb $'0', (%rax)
+                    dec %rax
+                    subq $2, %r10
+                    jmp reverse_read
+
+                put_hexadecimal_number:
+                    movq $16, %r13
+                    call put_number_in_res
+                    movb $'x', (%rax)
+                    dec %rax
+                    movb $'0', (%rax)
+                    dec %rax
+                    subq $2, %r10
+                    jmp reverse_read
+
+                case_zero:
+                    movb $48, (%rax)
+                    dec %rax
+                    dec %r10
+                    jmp reverse_read
+
+            call_put_string:
+                popq %r8
+                subq %r8, %r10
+                popq %r11
+                pushq %r10
+                call put_string_in_res
+                popq %r10
+                jmp reverse_read
+
+            call_put_char:
+                popq %r8
+                dec %r10
+                movb %r8b, (%rax)
+                dec %rax
+                jmp reverse_read
+
+            call_put_array:
+                dec %r15 /* pass the 't' */
+                dec %r15 /* pass the '%' */
+                popq %rsi /* pointer to the last element in array */
+                popq %r11 /* the number of elements in the array */
+                movb $']', (%rax)
+                dec %rax /* dec the buffer pointer and the remaining bytes to copy */
+                dec %r10
+                movb (%r15), %r12b
+                cmpb $'b', %r12b
+                je array_put_binary
+                cmpb $'h', %r12b
+                je array_put_hexadecimal
+                movq $10, %r13
+                put_array_loop:
+                    movl (%rsi), %r8d
+                    pushq %r8
+                    pushq $1
+                    call put_number_in_res
+                    subq $4, %rsi
+                    dec %r11
+                    cmpq $0, %r11
+                    je put_array_done
+                    movb $',', (%rax)
+                    dec %rax
+                    dec %r10
+                    jmp put_array_loop
+
+                put_array_done:
+                    movb $'[', (%rax)
+                    dec %rax
+                    dec %r13
+                    jmp reverse_read
+                
+                array_put_binary:
+                    movq $2, %r13
+                    jmp put_array_loop
+
+                array_put_hexadecimal:
+                    movq $16, %r13
+                    jmp put_array_loop
+    print:
+        movq %r9, %rsi
+        movq $1, %rax
+        movq $0, %rdi
+        syscall
+        movq %r9, %rsi
+        call free
+
+    done:
+        popq %r13
+        popq %r15
+        popq %r12
+        leave
+        ret
+
+.global get_arg_size
+get_arg_size:
+    enter $0, $0
+    movq $0, %rax
+    cmpb $'s', %r12b
+    je string
+    cmpb $'c', %r12b
+    je char
+    
+    /* number: */
+        pushq %rdx
+        pushq %r11
+        movq $1, %r11 /* initial size of the number */
+        movq %rsi, %rax /* put in rax for the division */
+        movq $1, %rsi
+        cmpb $'h', %r12b
+        je hexadecimal_number
+        cmpb $'b', %r12b
+        je binary_number
+
+        decimal_number:
+            movq $10, %r13
+            jmp get_number_size
+
+        hexadecimal_number:
+            movq $16, %r13
+            jmp add_header_size
+
+        binary_number:
+            movq $2, %r13
+
+        add_header_size:
+            addq $2, %r11 /* 0x or 0b */
+
+        get_number_size:
+            movq $0, %rdx
+            cmpq %r13, %rax
+            jl get_number_size_done
+            idivq %r13
+            inc %r11
+            jmp get_number_size
+
+        get_number_size_done:
+            movq %r11, %rax
+            popq %r11
+            popq %rdx
+            jmp get_arg_size_done
+
+        string:
+            movb (%rsi), %r13b
+            cmpb $0, %r13b
+            je get_arg_size_done
+            inc %rsi
+            inc %rax
+            jmp string
+
+        char:
+            inc %rax
+        
+
+    get_arg_size_done:
+        leave
+        ret
+
+
+.global put_number_in_res
+put_number_in_res:
+    enter $0, $0
+    pushq %r14
+    movq %rax, %r14
+    movq %r8, %rax
+
+    division_put:
+        movq $0, %rdx
+        cmpq $0, %rax
+        je put_number_done
+        idivq %r13
+        cmpq $9, %rdx
+        jg hexa
+        addq $48, %rdx
+
+        put_decimal:
+            movb %dl, (%r14)
+            dec %r14
+            dec %r10
+            jmp division_put
+
+        hexa:
+            addq $55, %rdx
+            jmp put_decimal
+
+    put_number_done:
+        movq %r14, %rax
+        popq %rdx
+        popq %r14
+        leave
+        ret
+
+.global put_string_in_res
+put_string_in_res:
+    enter $0, $0
+    dec %r8
+    addq %r8, %r11 /* go to the end of the string */
+    loop:
+        movb (%r11), %r12b
+        movb %r12b, (%rax)
+        dec %rax
+        dec %r11
+        dec %r8
+        cmpq $-1, %r8
+        jne loop
+    leave
+    ret
