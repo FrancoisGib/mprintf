@@ -263,6 +263,7 @@ mprintf:
         movq $0, %rdi
         movq %r9, %rdx
         syscall
+        movq %r9, %rsi
         call free
 
     done:
