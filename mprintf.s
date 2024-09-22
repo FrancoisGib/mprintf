@@ -258,11 +258,11 @@ mprintf:
                     movq $16, %r13
                     jmp put_array_loop
     print:
-        movq %r9, %rsi
+        movq %rax, %rsi
         movq $1, %rax
         movq $0, %rdi
+        movq %r9, %rdx
         syscall
-        movq %r9, %rsi
         call free
 
     done:
@@ -385,3 +385,4 @@ put_string_in_res:
         jne loop
     leave
     ret
+    
